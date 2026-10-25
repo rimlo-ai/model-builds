@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Turns build.sh's <dist> into release files in <out>: each named nemotron-<version>-r<revision>-<file>, with
-# SHA256SUMS, manifest.json (what Rimlo pins) and the release notes.
+# Turns build.sh's <dist> into release files in <out>: each named nemotron-<version>-r<revision>-<file> (per
+# architecture where they differ), with SHA256SUMS, manifest.json (what Rimlo pins) and the release notes.
 #
 #   ./release.sh <dist> <out> <notes-file>
 set -euo pipefail
@@ -19,9 +19,14 @@ if [ -n "${GITHUB_REF_NAME:-}" ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
   exit 1
 fi
 
-cp "$dist/int8/encoder.onnx" "$out/$tag-int8-encoder.onnx"
-cp "$dist/int4/encoder.onnx" "$out/$tag-int4-encoder.onnx"
-for file in decoder.onnx joint.onnx tokens.json LICENSE-OpenMDW-1.1.txt NOTICE.md; do
+for arch in arm64 x64; do
+  for variant in int8 int4; do
+    cp "$dist/$arch/$variant/encoder.onnx" "$out/$tag-$arch-$variant-encoder.onnx"
+  done
+  cp "$dist/$arch/decoder.onnx" "$out/$tag-$arch-decoder.onnx"
+  cp "$dist/$arch/joint.onnx" "$out/$tag-$arch-joint.onnx"
+done
+for file in tokens.json LICENSE-OpenMDW-1.1.txt NOTICE.md; do
   cp "$dist/$file" "$out/$tag-$file"
 done
 
@@ -35,10 +40,16 @@ tag, base, checkpoint, revision = sys.argv[1:]
 def entry(name):
     data = open(f'{tag}-{name}', 'rb').read()
     return {'url': f'{base}/{tag}-{name}', 'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
-shared = {role: entry(name) for role, name in (('decoder', 'decoder.onnx'), ('joint', 'joint.onnx'),
-                                               ('tokens', 'tokens.json'), ('license', 'LICENSE-OpenMDW-1.1.txt'),
+shared = {role: entry(name) for role, name in (('tokens', 'tokens.json'), ('license', 'LICENSE-OpenMDW-1.1.txt'),
                                                ('notice', 'NOTICE.md'))}
-variants = {v: {'encoder': entry(f'{v}-encoder.onnx'), **shared} for v in ('int8', 'int4')}
+variants = {
+    v: {
+        arch: {'encoder': entry(f'{arch}-{v}-encoder.onnx'), 'decoder': entry(f'{arch}-decoder.onnx'),
+               'joint': entry(f'{arch}-joint.onnx'), **shared}
+        for arch in ('arm64', 'x64')
+    }
+    for v in ('int8', 'int4')
+}
 json.dump({'tag': tag, 'checkpoint': {'repo': checkpoint, 'revision': revision}, 'variants': variants},
           sys.stdout, indent=2)
 print()
@@ -53,8 +64,11 @@ print(f'Speech recognition for [Rimlo](https://rimlo.app): NVIDIA Nemotron 3.5 A
       f'pass per segment and quantized. Built by CI from [{checkpoint}](https://huggingface.co/{checkpoint}/tree/{revision}) '
       f'at `{revision[:12]}`, and checked against PyTorch before release. OpenMDW-1.1.')
 print()
-print('| Build | Download |')
-print('| --- | --- |')
-for name, files in manifest['variants'].items():
-    print(f'| `{name}` | {sum(f["size"] for f in files.values()) / 1e6:.0f} MB |')
+print('| Build | arm64 download | x64 download |')
+print('| --- | --- | --- |')
+for name, archs in manifest['variants'].items():
+    sizes = [f'{sum(f["size"] for f in archs[a].values()) / 1e6:.0f} MB' for a in ('arm64', 'x64')]
+    print(f'| `{name}` | {sizes[0]} | {sizes[1]} |')
+print()
+print('8-bit weights are signed for arm64 and unsigned for x64, where signed ones saturate on CPUs without VNNI.')
 PY

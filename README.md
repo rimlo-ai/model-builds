@@ -13,7 +13,12 @@ Rimlo runs it on ONNX Runtime's CPU provider, one offline pass per segment of up
 | `int8` | int8 per channel | 664 MB | ~1.1 GB | ~39× real time |
 | `int4` | feed-forward int4 (symmetric, blocks of 64), the rest int8 | 486 MB | ~0.9 GB | ~32× real time |
 
-The decoder and joint network are 8-bit in both. 8-bit weights are unsigned: with signed weights, x86 CPUs that have AVX2 but not VNNI (AMD Zen 2 and 3, Intel before Ice Lake) saturate in ONNX Runtime's int8 kernels and transcribe nothing. CI runs on such a CPU, so the verification catches it. Each segment adds about 0.25 GB while it's transcribed.
+The decoder and joint network are 8-bit in both. Each segment adds about 0.25 GB while it's transcribed.
+
+Each build comes for two architectures, which differ only in how 8-bit weights are stored:
+
+- **arm64**: signed. On Apple silicon this is about 1.5× as fast as unsigned and takes less memory.
+- **x64**: unsigned. On x86 CPUs that have AVX2 but not VNNI (AMD Zen 2 and 3, Intel before Ice Lake), ONNX Runtime multiplies unsigned activations by signed weights with an instruction whose 16-bit sums saturate, and transcripts come out empty. Signed 7-bit weights would avoid that too, but cost 2–3 points of word error rate.
 
 Accuracy, as word error rate (lower is better):
 
@@ -27,7 +32,7 @@ These were measured on 30–40 clips per set, so treat them as directional.
 
 ### Files
 
-Each release has, named `nemotron-<version>-r<revision>-<file>`:
+Each release has, named `nemotron-<version>-r<revision>-<file>` (with `arm64-` or `x64-` for the ONNX files):
 
 - `int8-encoder.onnx`, `int4-encoder.onnx`: log-mel `features` [1, frames, 128] and a language `prompt` id [1] → `encoded` [1, steps, 640]. The FastConformer encoder with the attention it was trained with (56 steps of left context, 3 of lookahead), the language-prompt fusion and the joint network's encoder projection.
 - `decoder.onnx`: one prediction-network step: `token` [1, 1], `h` and `c` [2, 1, 640] → `decoded`, `h_out`, `c_out`.
@@ -48,10 +53,10 @@ venv/bin/pip install -r nemotron/requirements.txt
 PYTHON=venv/bin/python nemotron/build.sh work
 ```
 
-`build.sh` exports fp32 ONNX (`export.py`), quantizes both builds (`quantize.py`), writes `tokens.json` (`package.py`) and verifies the result (`verify.py`):
+`build.sh` exports fp32 ONNX (`export.py`), quantizes both builds for both architectures (`quantize.py`), writes `tokens.json` (`package.py`), and checks:
 
-- The fp32 encoder graph must match PyTorch within 2 × 10⁻³ on every test clip.
-- Transcripts decoded from the graphs must match PyTorch's greedy decoding: exactly for fp32, and within a mean character error rate of 5% (`int8`) and 8% (`int4`).
+- `reference.py`: the fp32 encoder graph must match PyTorch within 2 × 10⁻³ on every test clip, and transcripts decoded from the fp32 graphs must equal PyTorch's greedy decoding. It saves the clips' features and PyTorch's transcripts.
+- `check.py`: each architecture's builds, run on a CPU of that architecture, must stay within a mean character error rate of 5% (`int8`) and 8% (`int4`) of PyTorch's transcripts. CI checks x64 on an AMD EPYC (no VNNI) and arm64 on GitHub's Arm runner; `build.sh` checks the machine it runs on.
 
 It needs about 7 GB of memory and 10 GB of disk.
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Builds and verifies Rimlo's speech-recognition models from NVIDIA's pinned checkpoint: downloads it (checked by
-# SHA-256), exports fp32 ONNX, quantizes the int8 and int4 builds, writes tokens.json and checks the result against
-# PyTorch. Expects the toolchain from requirements.txt on PATH's python3 (or $PYTHON).
+# Builds Rimlo's speech-recognition models from NVIDIA's pinned checkpoint: downloads it (checked by SHA-256),
+# exports fp32 ONNX and checks it against PyTorch, quantizes the int8 and int4 builds for each architecture, writes
+# tokens.json and the reference that check.py compares builds against, then checks this machine's architecture.
+# Expects the toolchain from requirements.txt on PATH's python3 (or $PYTHON).
 #
 #   ./build.sh <work-dir>      The release files end up in <work-dir>/dist.
 set -euo pipefail
@@ -32,4 +33,6 @@ cd "$here"
 "$python" quantize.py "$work/fp32" "$work/dist"
 "$python" package.py "$checkpoint" "$work/dist"
 cp LICENSE-OpenMDW-1.1.txt NOTICE.md "$work/dist/"
-"$python" verify.py "$checkpoint" "$work/fp32" "$work/dist" tests
+"$python" reference.py "$checkpoint" "$work/fp32" "$work/dist/tokens.json" tests "$work/dist/reference"
+case "$(uname -m)" in arm64 | aarch64) arch=arm64 ;; *) arch=x64 ;; esac
+"$python" check.py "$work/dist" "$arch"

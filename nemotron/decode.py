@@ -1,12 +1,11 @@
-"""Transcribes with the exported graphs, the way Rimlo does: one encoder pass over the segment, then greedy RNN-T
-decoding (at most maxSymbolsPerStep tokens per encoder step, the decoder re-run only after a token)."""
+"""Transcribes with the exported graphs, the way Rimlo does: one encoder pass over the segment's features, then greedy
+RNN-T decoding (at most maxSymbolsPerStep tokens per encoder step, the decoder re-run only after a token). Needs only
+numpy and onnxruntime."""
 import json
 import re
 
 import numpy as np
 import onnxruntime as ort
-
-from features import features
 
 SPECIAL = re.compile(r'<(?:[a-z]{2}-[A-Z]{2}|unk)>')
 
@@ -19,11 +18,11 @@ class Transcriber:
         self.encoder, self.decoder, self.joint = session(encoder), session(decoder), session(joint)
         self.tokens = json.load(open(tokens))
 
-    def __call__(self, audio, language='auto'):
+    def __call__(self, features, language='auto'):
+        """The transcript of log-mel `features` [1, frames, 128] (see features.py)."""
         t = self.tokens
         prompt = t['autoPrompt'] if language == 'auto' else t['prompts'][language]
-        x = features(audio).numpy()
-        encoded = self.encoder.run(None, {'features': x, 'prompt': np.array([prompt], dtype=np.int64)})[0]
+        encoded = self.encoder.run(None, {'features': features, 'prompt': np.array([prompt], dtype=np.int64)})[0]
         layers, hidden = t['decoder']['layers'], t['decoder']['hidden']
         h = np.zeros((layers, 1, hidden), np.float32)
         c = np.zeros((layers, 1, hidden), np.float32)
