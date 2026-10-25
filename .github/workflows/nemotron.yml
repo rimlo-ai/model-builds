@@ -23,6 +23,8 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --only-binary=:all: --index-url https://download.pytorch.org/whl/cpu torch==2.7.1
           "$RUNNER_TEMP/venv/bin/pip" install --only-binary=:all: -r nemotron/requirements.txt
+      # Quantized kernels differ by CPU, so record which one verified the build.
+      - run: lscpu | grep -E 'Model name|Flags'
       - run: nemotron/build.sh "$RUNNER_TEMP/work"
         env:
           PYTHON: ${{ runner.temp }}/venv/bin/python
@@ -31,6 +33,13 @@ jobs:
           name: nemotron
           path: ${{ runner.temp }}/work/dist
           if-no-files-found: error
+          retention-days: 3
+      # A failed verification keeps what it checked, to look into.
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nemotron-failed
+          path: ${{ runner.temp }}/work/dist
           retention-days: 3
 
   release:
