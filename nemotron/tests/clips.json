@@ -1,0 +1,29 @@
+{
+ "source": "google/fleurs test split (CC BY 4.0), via the mteb/fleurs mirror",
+ "clips": [
+  {
+   "file": "en_us-1675.wav",
+   "language": "en_us",
+   "seconds": 8.76,
+   "text": "all nouns alongside the word sie for you always begin with a capital letter even in the middle of a sentence"
+  },
+  {
+   "file": "hi_in-1784.wav",
+   "language": "hi_in",
+   "seconds": 13.8,
+   "text": "ग्रीनलैंड को बहुत कम जगह बसाया गया था नॉर्स सगास में वे कहते हैं कि एरिक रेड हत्या के लिए आइसलैंड से निर्वासित किया गया था और आगे पश्चिम की यात्रा करते समय ग्रीनलैंड मिला जिसे ग्रीनलैंड नाम दिया गया"
+  },
+  {
+   "file": "es_419-2001.wav",
+   "language": "es_419",
+   "seconds": 12.84,
+   "text": "se recomienda enfáticamente a los viajeros que se informen sobre cualquier riesgo de clima extremo en el área que visitan dado que ello puede afectar sus planes de viaje"
+  },
+  {
+   "file": "ja_jp-1828.wav",
+   "language": "ja_jp",
+   "seconds": 10.44,
+   "text": "インターネットで 敵対的環境コース について検索すると おそらく現地企業の住所が出てくるでしょう"
+  }
+ ]
+}
