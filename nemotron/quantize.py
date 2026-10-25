@@ -1,11 +1,14 @@
 """Quantizes the fp32 export into the two builds Rimlo offers. Both keep activations in fp32 and quantize weights:
 
-- int8: every weight matrix to int8, per channel (dynamic quantization: MatMulInteger).
+- int8: every weight matrix to 8 bits, per channel (dynamic quantization: MatMulInteger).
 - int4: the feed-forward weights (two thirds of the encoder) to symmetric int4 in blocks of 64 (MatMulNBits), the
-  rest to int8 as above. Plain int4 everywhere, or asymmetric int4, cost more accuracy (and asymmetric int4 runs at
+  rest to 8 bits as above. Plain int4 everywhere, or asymmetric int4, cost more accuracy (and asymmetric int4 runs at
   half speed in ONNX Runtime).
 
-The decoder's embedding and both prediction-network and joint weights are int8 in both builds.
+The decoder's embedding and both prediction-network and joint weights are 8-bit in both builds.
+
+8-bit weights are unsigned (U8U8). With signed weights, x86 CPUs that have AVX2 but not VNNI (AMD Zen 2 and 3, Intel
+before Ice Lake) multiply them with an instruction whose 16-bit sums saturate, and the transcripts come out empty.
 
     python quantize.py FP32_DIR OUT_DIR
 """
@@ -19,7 +22,7 @@ from onnxruntime.quantization.matmul_nbits_quantizer import DefaultWeightOnlyQua
 
 
 def int8(source, target):
-    quantize_dynamic(source, target, weight_type=QuantType.QInt8, per_channel=True, op_types_to_quantize=['MatMul'])
+    quantize_dynamic(source, target, weight_type=QuantType.QUInt8, per_channel=True, op_types_to_quantize=['MatMul'])
 
 
 def int4(source, target):
@@ -45,9 +48,9 @@ def main():
         os.makedirs(f'{out}/{variant}', exist_ok=True)
         encode(f'{src}/encoder.onnx', f'{out}/{variant}/encoder.onnx')
         print('quantized', variant)
-    quantize_dynamic(f'{src}/decoder.onnx', f'{out}/decoder.onnx', weight_type=QuantType.QInt8,
+    quantize_dynamic(f'{src}/decoder.onnx', f'{out}/decoder.onnx', weight_type=QuantType.QUInt8,
                      op_types_to_quantize=['Gather', 'MatMul'])
-    quantize_dynamic(f'{src}/joint.onnx', f'{out}/joint.onnx', weight_type=QuantType.QInt8, per_channel=True,
+    quantize_dynamic(f'{src}/joint.onnx', f'{out}/joint.onnx', weight_type=QuantType.QUInt8, per_channel=True,
                      op_types_to_quantize=['MatMul', 'Gemm'])
     for f in sorted(os.listdir(out)):
         path = f'{out}/{f}'

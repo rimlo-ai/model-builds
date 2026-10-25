@@ -13,7 +13,7 @@ Rimlo runs it on ONNX Runtime's CPU provider, one offline pass per segment of up
 | `int8` | int8 per channel | 664 MB | ~1.1 GB | ~39× real time |
 | `int4` | feed-forward int4 (symmetric, blocks of 64), the rest int8 | 486 MB | ~0.9 GB | ~32× real time |
 
-The decoder and joint network are int8 in both. Each segment adds about 0.25 GB while it's transcribed.
+The decoder and joint network are 8-bit in both. 8-bit weights are unsigned: with signed weights, x86 CPUs that have AVX2 but not VNNI (AMD Zen 2 and 3, Intel before Ice Lake) saturate in ONNX Runtime's int8 kernels and transcribe nothing. CI runs on such a CPU, so the verification catches it. Each segment adds about 0.25 GB while it's transcribed.
 
 Accuracy, as word error rate (lower is better):
 
