@@ -66,6 +66,51 @@ To release, bump `REVISION` in `versions.sh` and push a tag `nemotron-<MODEL_VER
 
 `nemotron/tests/clips` holds four clips from the [FLEURS](https://huggingface.co/datasets/google/fleurs) test split (English, Hindi, Spanish and Japanese), CC BY 4.0, by Google, converted to 16-bit WAV.
 
+## Voice: noise removal and Enhance voice
+
+Two models for Rimlo's sound effects, which render a cleaned copy of a file's sound on request (not live):
+
+- **Noise removal**: [Ceva's DPDFNet-2](https://huggingface.co/Ceva-IP/DPDFNet) for 48 kHz (Apache-2.0), as released. It takes one 10 ms frame (960-point STFT with a Vorbis window, 480 hop) and its state per step, and returns gains applied as a deep filter. Rimlo blends its output with the original to limit how far noise is turned down.
+- **Enhance voice**: [Smule Renaissance Small](https://huggingface.co/smulelabs/Smule-Renaissance-Small) (MIT, 10.4M parameters), a generative restorer for degraded speech at 48 kHz. It's exported as a stateful step: a block of 16 frames of a 4096-point STFT (Hann, 2048 hop) in, the same frames 129 frames later out, with 37 state tensors carrying the time convolutions' history. Stepping a file through it gives the same output as running the whole file at once, without the memory that takes.
+
+| Model | Download | Loaded, while running | Speed (M4) |
+| --- | --- | --- | --- |
+| Noise removal | 10 MB | ~110 MB | ~10× real time, 1 thread |
+| Enhance voice | 43 MB | ~400 MB | ~10× real time, 4 threads |
+
+Both are fp32, so one build serves every architecture.
+
+### Files
+
+Each release has, named `voice-r<revision>-<file>`:
+
+- `denoise.onnx`: `spec` [1, 1, 481, 2] and `state_in` [56436] → `spec_e`, `state_out`.
+- `enhance.onnx`: `spec` [1, 2049, 16, 2], `t0` and `total` (int64 scalars: the block's first frame, and the file's length in frames) and the states → `out` [1, 2049, 16, 2] (frames `t0 − 129` onwards) and `<state>_next`.
+- `voice.json`: both models' STFT settings, DPDFNet's initial state (from its ONNX metadata) and the step model's state names and shapes.
+- The models' licences and a notice of the changes, `SHA256SUMS` and `manifest.json`.
+
+### Building
+
+`voice/versions.sh` pins both checkpoints by revision and every file by SHA-256. `voice/requirements.txt` pins the toolchain.
+
+```sh
+python3 -m venv venv
+venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch==2.7.1
+venv/bin/pip install -r voice/requirements.txt
+PYTHON=venv/bin/python voice/build.sh work
+```
+
+`build.sh` exports the step model (`export.py`, `srs_step.py`) and checks:
+
+- `reference.py`: PyTorch's whole-clip output for each test clip, and DPDFNet's output on this machine.
+- `check.py`: stepped through each clip, the step model must match PyTorch to within 10⁻³ of the peak (it's about 10⁻⁶), and DPDFNet must match the reference to the same tolerance. CI runs it on x64 and on GitHub's Arm runner.
+
+It needs about 1 GB of memory and takes a minute.
+
+To release, bump `REVISION` in `versions.sh` and push a tag `voice-r<REVISION>`.
+
+The test clips are Nemotron's (`nemotron/tests/clips`).
+
 ## Licences
 
 The models keep their upstream licences, included in every release with a notice of the changes.
